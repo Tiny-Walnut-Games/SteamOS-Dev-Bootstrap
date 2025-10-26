@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  steamos-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./test-results:/home/testuser/test-results
+    environment:
+      - TEST_MODE=full
+      - SECURITY_SCAN=false
+      - TERM=xterm-256color
+    command: bash -c "echo y | ./bootstrap-steamos.sh --verify-only"
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - seccomp=unconfined
+      - apparmor=unconfined
+    read_only: false
+    tmpfs:
+      - /tmp:exec,mode=1777
+      - /run:mode=1777
+    
+  security-scan:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./:/home/testuser/project
+    working_dir: /home/testuser/project
+    command: >
+      bash -c "
+        shellcheck -S warning bootstrap-steamos.sh &&
+        shellcheck -S warning test.sh &&
+        find scripts/ -type f -name '*.sh' -exec shellcheck {} \; &&
+        echo 'Security scan completed successfully'
+      "

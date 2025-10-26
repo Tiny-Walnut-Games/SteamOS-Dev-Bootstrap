@@ -1,0 +1,25 @@
+FROM ubuntu:22.04
+
+# Install basic tools
+RUN apt-get update && apt-get install -y \
+    sudo \
+    curl \
+    wget \
+    git \
+    bash \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create test user
+RUN useradd -m -s /bin/bash testuser && \
+    echo 'testuser ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
+
+# Set up working environment  
+WORKDIR /home/testuser
+USER testuser
+
+# Copy scripts
+COPY bootstrap-steamos.sh /home/testuser/
+COPY test/ubuntu-adaptation.sh /home/testuser/
+RUN chmod +x /home/testuser/*.sh
+
+CMD ["/bin/bash"]

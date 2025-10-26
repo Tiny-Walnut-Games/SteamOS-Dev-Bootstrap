@@ -1,0 +1,15 @@
+FROM archlinux:latest
+
+RUN pacman -Syu --noconfirm && \
+    pacman -S --noconfirm base-devel git curl wget shellcheck sudo
+
+# Create a non-root user to test sudo access
+RUN useradd -m -s /bin/bash testuser && \
+    echo "testuser ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+COPY bootstrap-steamos.sh /root/bootstrap-steamos.sh
+RUN chmod +x /root/bootstrap-steamos.sh
+
+WORKDIR /root
+
+CMD ["/bin/bash"]

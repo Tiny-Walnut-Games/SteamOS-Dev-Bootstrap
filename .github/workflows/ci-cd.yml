@@ -1,0 +1,243 @@
+name: SteamOS Bootstrap CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+    inputs:
+      test_mode:
+        description: 'Test mode'
+        required: true
+        default: 'full'
+        type: choice
+        options:
+          - full
+          - quick
+          - security-only
+
+jobs:
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install security scanning tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          pip install detect-secrets
+
+      - name: ShellCheck Analysis
+        run: |
+          shellcheck -S warning bootstrap-steamos.sh
+          shellcheck -S warning test.sh
+          find scripts/ -type f -name "*.sh" -exec shellcheck {} \;
+        continue-on-error: true
+
+      - name: Secret Detection
+        run: |
+          detect-secrets scan --all-files > secrets-report.json
+          
+          # Check if any secrets were found
+          if [ "$(grep -c "\"is_secret\": true" secrets-report.json)" -gt 0 ]; then
+            echo "::error::Potential secrets found in the codebase!"
+            grep -A 10 "\"is_secret\": true" secrets-report.json
+            exit 1
+          fi
+          
+      - name: Check for unsafe pipe patterns
+        run: |
+          # Create a temporary file with exceptions
+          cat > /tmp/pipe_exceptions.txt << EOF
+          # Test files are allowed to have pipe patterns
+          test/ubuntu-adaptation.sh
+          EOF
+          
+          # Check for pipe patterns in shell scripts, excluding exceptions
+          UNSAFE_PATTERNS=$(grep -r "curl.*|.*sh\|wget.*|.*sh" --include="*.sh" . | grep -v -f /tmp/pipe_exceptions.txt || true)
+          
+          if [ -n "$UNSAFE_PATTERNS" ]; then
+            echo "::error::Unsafe pipe-to-shell patterns found outside of test files:"
+            echo "$UNSAFE_PATTERNS"
+            exit 1
+          fi
+          
+      - name: Check for insecure certificate validation
+        run: |
+          INSECURE_CERT=$(grep -r "curl.*-k\|wget.*--no-check-certificate" --include="*.sh" . || true)
+          
+          if [ -n "$INSECURE_CERT" ]; then
+            echo "::error::Insecure certificate validation found:"
+            echo "$INSECURE_CERT"
+            exit 1
+          fi
+          
+      - name: Check for hardcoded credentials
+        run: |
+          # Look for potential hardcoded credentials
+          CREDENTIAL_PATTERNS=$(grep -r -E "(password|token|secret|key|credential).*=.*['\"].*['\"]" --include="*.sh" . || true)
+          
+          if [ -n "$CREDENTIAL_PATTERNS" ]; then
+            echo "::warning::Potential credential patterns found (manual review required):"
+            echo "$CREDENTIAL_PATTERNS"
+          fi
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-reports
+          path: |
+            secrets-report.json
+
+  validate:
+    name: Validate Script
+    runs-on: ubuntu-latest
+    needs: security-scan
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: './'
+          severity: error
+
+      - name: Check script version matches tag (on tag push)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+          FILE_VERSION=$(grep -oP 'VERSION="\K[^"]+' bootstrap-steamos.sh || cat VERSION)
+          if [ "$TAG_VERSION" != "$FILE_VERSION" ]; then
+            echo "::error::Version mismatch: Tag version ($TAG_VERSION) does not match script version ($FILE_VERSION)"
+            exit 1
+          fi
+          echo "Version check passed: $TAG_VERSION"
+
+  test:
+    name: Test in Docker
+    runs-on: ubuntu-latest
+    needs: [validate]
+    strategy:
+      matrix:
+        test_mode: [basic, full]
+        include:
+          - test_mode: basic
+            test_args: "--verify-only"
+          - test_mode: full
+            test_args: "--auto-yes"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build test Docker image
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          load: true
+          tags: steamos-bootstrap-test:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run test in Docker
+        run: |
+          # Create test container with appropriate test mode
+          docker run --name test-container-${{ matrix.test_mode }} \
+            steamos-bootstrap-test \
+            bash -c "echo y | ./bootstrap-steamos.sh ${{ matrix.test_args }}" || true
+
+          # Extract logs even if the container exits with an error
+          docker logs test-container-${{ matrix.test_mode }} > test-output-${{ matrix.test_mode }}.log
+
+          # Check for critical errors
+          if grep -E "log_error.*SteamOS.*not detected" test-output-${{ matrix.test_mode }}.log; then
+            echo "::error::Test failed: SteamOS environment not properly mocked"
+            exit 1
+          fi
+
+          # Check if the script reached the validation phase
+          if ! grep -E "System Verification & Preparation" test-output-${{ matrix.test_mode }}.log; then
+            echo "::error::Test failed: Script did not reach verification phase"
+            exit 1
+          fi
+
+          # Additional checks for full test mode
+          if [ "${{ matrix.test_mode }}" = "full" ]; then
+            if ! grep -E "Development Toolchains" test-output-${{ matrix.test_mode }}.log; then
+              echo "::warning::Full test did not reach toolchain installation phase"
+            fi
+          fi
+
+          echo "Test completed successfully"
+
+      - name: Upload test logs
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-logs-${{ matrix.test_mode }}
+          path: test-output-${{ matrix.test_mode }}.log
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [test]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$PREVIOUS_TAG" ]; then
+            # First release - get all commits
+            git log --pretty=format:"* %s (%h)" > CHANGELOG.md
+          else
+            # Get commits since previous tag
+            git log --pretty=format:"* %s (%h)" $PREVIOUS_TAG..HEAD > CHANGELOG.md
+          fi
+
+          echo "CHANGELOG=$(cat CHANGELOG.md)" >> $GITHUB_OUTPUT
+          cat CHANGELOG.md
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            bootstrap-steamos.sh
+            VERSION
+          name: SteamOS Bootstrap ${{ github.ref_name }}
+          body: |
+            ## SteamOS Development Environment Bootstrap ${{ github.ref_name }}
+
+            ### Changes in this release:
+            ${{ steps.changelog.outputs.CHANGELOG }}
+
+            ### Installation
+            ```bash
+            # Option 1: Download and verify (Recommended)
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/bootstrap-steamos.sh -o bootstrap-steamos.sh
+            less bootstrap-steamos.sh  # Review the script
+            bash bootstrap-steamos.sh
+            
+            # Option 2: Direct execution
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/bootstrap-steamos.sh | bash
+            ```
+          draft: false
+          prerelease: false

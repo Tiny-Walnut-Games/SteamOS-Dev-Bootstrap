@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  steamos-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./bootstrap-steamos.sh:/home/testuser/bootstrap-steamos.sh
+    tty: true
+    stdin_open: true
+    command: bash

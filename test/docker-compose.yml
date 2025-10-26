@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  steamos-test:
+    build:
+      context: ..
+      dockerfile: test/docker/Dockerfile.arch
+    container_name: steamos-bootstrap-test
+    volumes:
+      - ../bootstrap-steamos.sh:/home/deck/bootstrap-steamos.sh:ro
+      - ../test:/home/deck/test:ro
+    environment:
+      - TERM=xterm-256color
+    tty: true
+    stdin_open: true
+
+  ubuntu-test:
+    build:
+      context: ..
+      dockerfile: test/docker/Dockerfile.ubuntu
+    container_name: ubuntu-bootstrap-test
+    volumes:
+      - ../bootstrap-steamos.sh:/home/testuser/bootstrap-steamos.sh:ro
+      - ../test:/home/testuser/test:ro
+    environment:
+      - TERM=xterm-256color
+    tty: true
+    stdin_open: true

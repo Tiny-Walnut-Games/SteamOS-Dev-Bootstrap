@@ -1,0 +1,22 @@
+FROM archlinux:latest
+
+# Simulate SteamOS environment
+RUN echo 'ID="steamos"' > /etc/os-release && \
+    echo 'VERSION_ID="3.5"' >> /etc/os-release && \
+    echo 'PRETTY_NAME="SteamOS 3.5 (Holo)"' >> /etc/os-release
+
+# Install sudo and create a test user (similar to SteamOS deck user)
+RUN pacman -Syu --noconfirm && \
+    pacman -S --noconfirm sudo && \
+    useradd -m -G wheel deck && \
+    echo '%wheel ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
+
+# Set up working environment
+WORKDIR /home/deck
+USER deck
+
+# Copy the bootstrap script
+COPY bootstrap-steamos.sh /home/deck/
+RUN chmod +x /home/deck/bootstrap-steamos.sh
+
+CMD ["/bin/bash"]
