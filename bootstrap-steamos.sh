@@ -399,6 +399,13 @@ phase_git_setup() {
 phase_flatpak_setup() {
     log_section "Flatpak Setup & GUI Applications"
     
+    # Check if we're in a test environment
+    if [ -e /etc/steamos/mock_cmdline ]; then
+        log_warn "Test environment detected - skipping Flatpak setup"
+        log_info "Flatpak requires system bus access which is limited in containers"
+        return 0
+    fi
+    
     log_step "Installing Flatpak..."
     if check_command flatpak; then
         log_success "Flatpak already installed"
@@ -449,6 +456,13 @@ phase_flatpak_setup() {
 
 phase_containers() {
     log_section "Container & Virtualization Tools"
+    
+    # Check if we're in a test environment or already in a container
+    if [ -e /etc/steamos/mock_cmdline ] || [ -f /.dockerenv ]; then
+        log_warn "Test/container environment detected - skipping container tools setup"
+        log_info "Container tools require systemd which is limited in containers"
+        return 0
+    fi
     
     log_step "Installing Docker..."
     if sudo pacman -S docker --noconfirm 2>/dev/null; then
@@ -697,19 +711,76 @@ EOF
 main() {
     log_section "SteamOS Development Bootstrap - Beginning Ritual"
     
-    echo "This script will configure your SteamOS system for development."
-    echo "It will install: dev tools, programming languages, IDEs, games engines, and more."
-    echo ""
-    read -p "Continue? (y/n) " -n 1 -r REPLY
-    echo
-    if ! echo "$REPLY" | grep -qE "^[Yy]$"; then
-        log_warn "Bootstrap cancelled"
+    # Parse command line arguments
+    VERIFY_ONLY=false
+    AUTO_YES=false
+    QUICK_MODE=false
+    
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --verify-only)
+                VERIFY_ONLY=true
+                shift
+                ;;
+            --auto-yes)
+                AUTO_YES=true
+                shift
+                ;;
+            --quick)
+                QUICK_MODE=true
+                shift
+                ;;
+            *)
+                log_error "Unknown option: $1"
+                echo "Available options:"
+                echo "  --verify-only   Only run system verification phase"
+                echo "  --auto-yes      Automatically answer yes to all prompts"
+                echo "  --quick         Run minimal installation (verification + basic tools)"
+                exit 1
+                ;;
+        esac
+    done
+    
+    # Check for test environment
+    IS_TEST_ENV=false
+    if [ -e /etc/steamos/mock_cmdline ] || [ -f /.dockerenv ]; then
+        IS_TEST_ENV=true
+        log_warn "Test environment detected - some features will be limited"
+    fi
+    
+    # Skip confirmation if auto-yes is set
+    if [ "$AUTO_YES" != "true" ]; then
+        echo "This script will configure your SteamOS system for development."
+        echo "It will install: dev tools, programming languages, IDEs, games engines, and more."
+        echo ""
+        read -p "Continue? (y/n) " -n 1 -r REPLY
+        echo
+        if ! echo "$REPLY" | grep -qE "^[Yy]$"; then
+            log_warn "Bootstrap cancelled"
+            exit 0
+        fi
+    fi
+    
+    # Always run verification
+    phase_verify_system
+    
+    # Exit if verify-only mode
+    if [ "$VERIFY_ONLY" = "true" ]; then
+        log_success "System verification complete (verify-only mode)"
         exit 0
     fi
     
-    # Execute phases
-    phase_verify_system
+    # Run system update and basic tools
     phase_system_update
+    
+    # Exit if quick mode
+    if [ "$QUICK_MODE" = "true" ]; then
+        log_success "Basic setup complete (quick mode)"
+        phase_validation
+        exit 0
+    fi
+    
+    # Continue with full installation
     phase_dev_toolchains
     phase_git_setup
     phase_flatpak_setup

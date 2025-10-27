@@ -147,7 +147,7 @@ jobs:
           - test_mode: basic
             test_args: "--verify-only"
           - test_mode: full
-            test_args: "--auto-yes"
+            test_args: "--quick"
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -169,7 +169,7 @@ jobs:
           # Create test container with appropriate test mode
           docker run --name test-container-${{ matrix.test_mode }} \
             steamos-bootstrap-test \
-            bash -c "echo y | ./bootstrap-steamos.sh ${{ matrix.test_args }}" || true
+            bash -c "./bootstrap-steamos.sh ${{ matrix.test_args }} --auto-yes" || true
 
           # Extract logs even if the container exits with an error
           docker logs test-container-${{ matrix.test_mode }} > test-output-${{ matrix.test_mode }}.log

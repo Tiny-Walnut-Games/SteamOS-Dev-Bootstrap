@@ -127,10 +127,10 @@ esac
 
 # Add auto-yes if specified
 if [ "$AUTO_YES" = true ]; then
-  DOCKER_CMD="echo y | $TEST_CMD"
-else
-  DOCKER_CMD="$TEST_CMD"
+  TEST_CMD="$TEST_CMD --auto-yes"
 fi
+
+DOCKER_CMD="$TEST_CMD"
 
 echo "Running bootstrap script in test container (mode: $TEST_MODE)..."
 docker-compose run --rm steamos-test bash -c "$DOCKER_CMD"
