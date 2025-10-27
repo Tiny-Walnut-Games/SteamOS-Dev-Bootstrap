@@ -1,4 +1,4 @@
-FROM archlinux:base-20231015.0.191179@sha256:c09d2a1d1f4a2d3a4c5c5c74c8a3e5d4714a5a0f8be3d5d0132f233a7bf6470d
+FROM archlinux:base-latest
 
 # Install minimal dependencies for testing
 RUN pacman -Syu --noconfirm && \
