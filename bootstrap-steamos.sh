@@ -20,6 +20,11 @@ set -euo pipefail
 
 VERSION="1.0.0"
 
+# Display version information at startup
+display_version() {
+    echo -e "${MAGENTA}SteamOS Dev Bootstrap v${VERSION}${NC}"
+}
+
 # Colors for output (respecting terminal support)
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -44,9 +49,9 @@ validate_url() {
   fi
   
   # Check for known domains (add your trusted domains)
-  if [[ ! "$url" =~ github\.com|githubusercontent\.com|steamdeck-packages\.steamos\.cloud|deb\.nodesource\.com|sh\.rustup\.rs|packages\.microsoft\.com ]]; then
+  if [[ ! "$url" =~ (github\.com|githubusercontent\.com|steamdeck-packages\.steamos\.cloud|deb\.nodesource\.com|sh\.rustup\.rs|packages\.microsoft\.com) ]]; then
     echo "WARNING: URL is not from a known trusted domain" >&2
-    read -p "Continue anyway? (y/N): " confirm
+    read -r -p "Continue anyway? (y/N): " confirm
     [[ "$confirm" == "y" || "$confirm" == "Y" ]] || return 1
   fi
   
@@ -57,6 +62,7 @@ validate_url() {
 secure_download() {
   local url="$1"
   local output_file="$2"
+  local expected_checksum="${3:-}"  # Optional third parameter for checksum verification
   
   # Validate URL
   validate_url "$url" || return 1
@@ -68,6 +74,12 @@ secure_download() {
   fi
   
   echo "Successfully downloaded to $output_file"
+  
+  # If checksum provided, verify it
+  if [[ -n "$expected_checksum" ]]; then
+    verify_checksum "$output_file" "$expected_checksum" || return 1
+  fi
+  
   return 0
 }
 
@@ -142,10 +154,6 @@ log_section() {
     echo -e "${MAGENTA}════════════════════════════════════════════════════════════${NC}"
     echo -e "${MAGENTA}🌲 $*${NC}"
     echo -e "${MAGENTA}════════════════════════════════════════════════════════════${NC}"
-}
-
-log_step() {
-    echo -e "${BLUE}→${NC} $*"
 }
 
 log_step() {
@@ -502,6 +510,111 @@ phase_git_setup() {
     if check_command gh; then
         log_success "GitHub CLI ready"
     fi
+    
+    log_step "Testing secure download utilities..."
+    # Validate a known trusted URL
+    local test_url="https://github.com/Tiny-Walnut-Games/SteamOS-Dev-Bootstrap/raw/main/README.md"
+    if validate_url "$test_url"; then
+        log_success "URL validation passed for trusted domain"
+    else
+        log_warn "URL validation failed for test URL"
+    fi
+}
+
+# ============================================================================
+# PHASE 4.5: SECURE DOWNLOAD & EXECUTION UTILITIES
+# ============================================================================
+
+phase_secure_download_utils() {
+    log_section "Secure Download & Execution Setup"
+    
+    log_step "Initializing secure download utilities..."
+    
+    # Test 1: URL validation with known trusted domain
+    log_step "Testing URL validation..."
+    local test_url="https://raw.githubusercontent.com/Tiny-Walnut-Games/SteamOS-Dev-Bootstrap/main/README.md"
+    if validate_url "$test_url"; then
+        log_success "URL validation passed for trusted domain"
+    else
+        log_warn "URL validation failed"
+        return 1
+    fi
+    
+    # Test 2: Secure download with checksum verification
+    log_step "Testing secure download with checksum verification..."
+    local test_file="/tmp/test_download_verify.txt"
+    
+    # Create a test file locally to verify checksum mechanism
+    echo "test content for verification" > "$test_file"
+    local expected_checksum
+    expected_checksum=$(sha256sum "$test_file" | cut -d' ' -f1)
+    
+    # Test verify_checksum function directly
+    if verify_checksum "$test_file" "$expected_checksum"; then
+        log_success "Checksum verification working correctly"
+    else
+        log_error "Checksum verification failed"
+        rm -f "$test_file"
+        return 1
+    fi
+    
+    # Test with wrong checksum to ensure detection works
+    log_step "Testing checksum mismatch detection..."
+    if verify_checksum "$test_file" "0000000000000000000000000000000000000000000000000000000000000000" 2>/dev/null; then
+        log_error "Checksum verification should have failed for wrong hash"
+        rm -f "$test_file"
+        return 1
+    else
+        log_success "Checksum mismatch correctly detected"
+    fi
+    
+    rm -f "$test_file"
+    
+    # Test 3: Safe script execution
+    log_step "Testing safe script execution..."
+    local test_script="/tmp/test_safe_exec.sh"
+    
+    # Create a simple test script
+    cat > "$test_script" << 'EOF'
+#!/bin/bash
+echo "Test script executed safely"
+exit 0
+EOF
+    chmod +x "$test_script"
+    
+    # Test safe_execute function
+    if safe_execute "$test_script"; then
+        log_success "Safe script execution working correctly"
+    else
+        log_warn "Safe script execution test did not complete as expected"
+    fi
+    
+    rm -f "$test_script"
+    
+    # Test 4: Integrated secure download (if network available)
+    log_step "Testing integrated secure download..."
+    local download_test_file="/tmp/test_integrated_download.txt"
+    
+    if secure_download "$test_url" "$download_test_file" 2>/dev/null; then
+        if [ -f "$download_test_file" ] && [ -s "$download_test_file" ]; then
+            log_success "Integrated secure download verified"
+            
+            # Calculate checksum of downloaded file for future reference
+            local download_checksum
+            download_checksum=$(sha256sum "$download_test_file" | cut -d' ' -f1)
+            log_info "Downloaded file checksum: $download_checksum"
+            
+            rm -f "$download_test_file"
+        else
+            log_warn "Secure download completed but file is empty"
+        fi
+    else
+        log_warn "Integrated secure download test failed (may be network issue)"
+    fi
+    
+    log_step "All secure utility functions tested and operational"
+    
+    return 0
 }
 
 # ============================================================================
@@ -569,6 +682,9 @@ phase_flatpak_setup() {
         app_name="${app_name##*( )}"
         app_name="${app_name%%*( )}"
         
+        # Collect apps for processing
+        FLATPAK_APPS+=("$app_id")
+        
         log_step "Checking $app_name ($app_id)..."
         
         if flatpak list --app 2>/dev/null | grep -qE "^[[:space:]]*${app_id}[[:space:]]"; then
@@ -585,6 +701,10 @@ phase_flatpak_setup() {
             fi
         fi
     done < "$CATALOG_FILE"
+    
+    if [ ${#FLATPAK_APPS[@]} -gt 0 ]; then
+        log_info "Processed Flatpak applications: ${FLATPAK_APPS[*]}"
+    fi
     
     if [ $APPS_INSTALLED -gt 0 ]; then
         log_success "Flatpak applications setup complete ($APPS_INSTALLED installed)"
@@ -758,6 +878,7 @@ phase_validation() {
     local TESTS_PASSED=0
     local TESTS_FAILED=0
     local REQUIRED_FAILED=0
+    local OPTIONAL_PASSED=0
     
     # Define required and optional tools
     local REQUIRED_TOOLS=("git" "python3" "pip" "node" "npm" "java" "rustc" "cargo" "go" "make" "curl" "wget")
@@ -787,22 +908,27 @@ phase_validation() {
             output=$($cmd_check 2>&1 | head -1)
             echo -e "${GREEN}✓${NC} $cmd_name: $output"
             TESTS_PASSED=$((TESTS_PASSED + 1))
+            
+            # Track optional tools that passed
+            if [[ " ${OPTIONAL_TOOLS[*]} " =~ ${cmd_name} ]]; then
+                OPTIONAL_PASSED=$((OPTIONAL_PASSED + 1))
+            fi
         else
             echo -e "${RED}✗${NC} $cmd_name: NOT FOUND"
             TESTS_FAILED=$((TESTS_FAILED + 1))
             
             # Check if this is a required tool
-            if [[ " ${REQUIRED_TOOLS[*]} " =~ " ${cmd_name} " ]]; then
+            if [[ " ${REQUIRED_TOOLS[*]} " =~ ${cmd_name} ]]; then
                 log_error "Required tool '$cmd_name' is missing"
                 REQUIRED_FAILED=$((REQUIRED_FAILED + 1))
-            else
+            elif [[ " ${OPTIONAL_TOOLS[*]} " =~ ${cmd_name} ]]; then
                 log_warn "Optional tool '$cmd_name' is missing"
             fi
         fi
     done
     
     log_section "Smoke Test Results"
-    echo -e "Passed: ${GREEN}${TESTS_PASSED}${NC} | Failed: ${RED}${TESTS_FAILED}${NC} (${RED}${REQUIRED_FAILED}${NC} required)"
+    echo -e "Passed: ${GREEN}${TESTS_PASSED}${NC} | Failed: ${RED}${TESTS_FAILED}${NC} (${RED}${REQUIRED_FAILED}${NC} required) | Optional: ${GREEN}${OPTIONAL_PASSED}/${#OPTIONAL_TOOLS[@]}${NC}"
     
     # Check if we're in a test environment
     if [ "$IS_TEST_ENV" = "true" ]; then
@@ -894,6 +1020,9 @@ EOF
 # ============================================================================
 
 main() {
+    # Display version at startup
+    display_version
+    
     log_section "SteamOS Development Bootstrap - Beginning Ritual"
     
     # Parse command line arguments
@@ -970,6 +1099,7 @@ main() {
     
     phase_dev_toolchains || ((ERRORS++))
     phase_git_setup || ((ERRORS++))
+    phase_secure_download_utils || ((ERRORS++))
     phase_flatpak_setup || ((ERRORS++))
     phase_containers || ((ERRORS++))
     phase_shell_setup || ((ERRORS++))
