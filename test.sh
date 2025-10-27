@@ -133,6 +133,16 @@ fi
 DOCKER_CMD="$TEST_CMD"
 
 echo "Running bootstrap script in test container (mode: $TEST_MODE)..."
+# Run the command and capture its exit status
 docker-compose run --rm steamos-test bash -c "$DOCKER_CMD"
+TEST_EXIT_CODE=$?
 
-echo "Test completed successfully!"
+# Check if the test was successful
+if [ $TEST_EXIT_CODE -eq 0 ]; then
+  echo "Test completed successfully!"
+  exit 0
+else
+  echo "ERROR: Test failed with exit code $TEST_EXIT_CODE"
+  echo "Check the logs above for details on what failed."
+  exit $TEST_EXIT_CODE
+fi

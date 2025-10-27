@@ -166,12 +166,13 @@ jobs:
 
       - name: Run test in Docker
         run: |
-          # Create test container with appropriate test mode
+          # Create test container with appropriate test mode and capture exit code
           docker run --name test-container-${{ matrix.test_mode }} \
             steamos-bootstrap-test \
-            bash -c "./bootstrap-steamos.sh ${{ matrix.test_args }} --auto-yes" || true
+            bash -c "./bootstrap-steamos.sh ${{ matrix.test_args }} --auto-yes"
+          TEST_EXIT_CODE=$?
 
-          # Extract logs even if the container exits with an error
+          # Extract logs
           docker logs test-container-${{ matrix.test_mode }} > test-output-${{ matrix.test_mode }}.log
 
           # Check for critical errors
@@ -189,8 +190,55 @@ jobs:
           # Additional checks for full test mode
           if [ "${{ matrix.test_mode }}" = "full" ]; then
             if ! grep -E "Development Toolchains" test-output-${{ matrix.test_mode }}.log; then
-              echo "::warning::Full test did not reach toolchain installation phase"
+              echo "::error::Full test did not reach toolchain installation phase"
+              exit 1
             fi
+            
+            # Check for application installation failures
+            if grep -E "ERROR|FAILED|failed to|could not|Bootstrap completed with .* phase\(s\) reporting errors" test-output-${{ matrix.test_mode }}.log | grep -v "grep"; then
+              echo "::error::Application installation failures detected in logs"
+              grep -E "ERROR|FAILED|failed to|could not|Bootstrap completed with .* phase\(s\) reporting errors" test-output-${{ matrix.test_mode }}.log | grep -v "grep"
+              exit 1
+            fi
+            
+            # Check for required tools that should be installed
+            REQUIRED_TOOLS=("pip" "node" "npm" "java" "rustc" "cargo" "go")
+            OPTIONAL_TOOLS=("flatpak")
+            MISSING_REQUIRED=0
+            MISSING_OPTIONAL=0
+            
+            echo "Checking for required tools..."
+            for tool in "${REQUIRED_TOOLS[@]}"; do
+              if grep -E "✗ $tool: NOT FOUND" test-output-${{ matrix.test_mode }}.log; then
+                echo "::error::Required tool '$tool' was not installed"
+                MISSING_REQUIRED=1
+              fi
+            done
+            
+            echo "Checking for optional tools..."
+            for tool in "${OPTIONAL_TOOLS[@]}"; do
+              if grep -E "✗ $tool: NOT FOUND" test-output-${{ matrix.test_mode }}.log; then
+                echo "::warning::Optional tool '$tool' was not installed"
+                MISSING_OPTIONAL=1
+              fi
+            done
+            
+            # Check for the summary line indicating required tools failed
+            if grep -E "required tools are missing" test-output-${{ matrix.test_mode }}.log; then
+              echo "::error::Required tools are missing according to validation"
+              MISSING_REQUIRED=1
+            fi
+            
+            if [ $MISSING_REQUIRED -eq 1 ]; then
+              echo "::error::One or more required tools were not installed"
+              exit 1
+            fi
+          fi
+
+          # Check the exit code from the bootstrap script
+          if [ $TEST_EXIT_CODE -ne 0 ]; then
+            echo "::error::Bootstrap script failed with exit code $TEST_EXIT_CODE"
+            exit 1
           fi
 
           echo "Test completed successfully"
