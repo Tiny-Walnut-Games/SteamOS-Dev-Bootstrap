@@ -563,9 +563,11 @@ phase_flatpak_setup() {
         # Skip empty lines, comments, and section headers
         [[ -z "$app_id" || "$app_id" =~ ^# || "$app_id" =~ ^\[ ]] && continue
         
-        # Trim whitespace
-        app_id=$(echo "$app_id" | xargs)
-        app_name=$(echo "$app_name" | xargs)
+        # Trim whitespace safely (without xargs which fails on quotes)
+        app_id="${app_id##*( )}"     # Remove leading spaces
+        app_id="${app_id%%*( )}"     # Remove trailing spaces
+        app_name="${app_name##*( )}"
+        app_name="${app_name%%*( )}"
         
         log_step "Checking $app_name ($app_id)..."
         
