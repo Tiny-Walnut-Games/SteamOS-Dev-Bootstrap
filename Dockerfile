@@ -1,4 +1,4 @@
-FROM archlinux:base-latest
+FROM archlinux:base
 
 # Install minimal dependencies for testing
 RUN pacman -Syu --noconfirm && \
