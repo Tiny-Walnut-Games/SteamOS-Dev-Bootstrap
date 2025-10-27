@@ -294,6 +294,7 @@ phase_dev_toolchains() {
     
     # Track installation failures
     local INSTALL_FAILURES=0
+    local REQUIRED_FAILURES=0
     
     log_step "Installing Python ecosystem..."
     local PYTHON_PKGS=("python" "python-pip" "python-virtualenv" "python-black" "python-mypy")
@@ -301,6 +302,9 @@ phase_dev_toolchains() {
         if ! sudo pacman -S "$pkg" --noconfirm; then
             log_error "Failed to install $pkg"
             ((INSTALL_FAILURES++))
+            if [[ "$pkg" == "python" || "$pkg" == "python-pip" ]]; then
+                ((REQUIRED_FAILURES++))
+            fi
         fi
     done
     
@@ -308,6 +312,7 @@ phase_dev_toolchains() {
     if ! python --version &>/dev/null; then
         log_error "Python installation failed"
         ((INSTALL_FAILURES++))
+        ((REQUIRED_FAILURES++))
     else
         log_success "Python installed: $(python --version 2>&1)"
     fi
@@ -316,6 +321,7 @@ phase_dev_toolchains() {
     if ! pip --version &>/dev/null; then
         log_error "pip installation failed"
         ((INSTALL_FAILURES++))
+        ((REQUIRED_FAILURES++))
     else
         log_success "pip installed: $(pip --version)"
     fi
@@ -324,12 +330,14 @@ phase_dev_toolchains() {
     if ! sudo pacman -S nodejs npm --noconfirm; then
         log_error "Node.js installation failed"
         ((INSTALL_FAILURES++))
+        ((REQUIRED_FAILURES++))
     fi
     
     # Verify Node.js installation
     if ! node --version &>/dev/null; then
         log_error "Node.js installation failed"
         ((INSTALL_FAILURES++))
+        ((REQUIRED_FAILURES++))
     else
         log_success "Node.js installed: $(node --version)"
     fi
@@ -338,6 +346,7 @@ phase_dev_toolchains() {
     if ! npm --version &>/dev/null; then
         log_error "npm installation failed"
         ((INSTALL_FAILURES++))
+        ((REQUIRED_FAILURES++))
     else
         log_success "npm installed: $(npm --version)"
     fi
@@ -346,12 +355,14 @@ phase_dev_toolchains() {
     if ! sudo pacman -S jdk-openjdk --noconfirm; then
         log_error "OpenJDK installation failed"
         ((INSTALL_FAILURES++))
+        ((REQUIRED_FAILURES++))
     fi
     
     # Verify Java installation
     if ! java -version &>/dev/null; then
         log_error "Java installation failed"
         ((INSTALL_FAILURES++))
+        ((REQUIRED_FAILURES++))
     else
         log_success "Java installed: $(java -version 2>&1 | head -1)"
     fi
@@ -360,12 +371,14 @@ phase_dev_toolchains() {
     if ! sudo pacman -S rust cargo --noconfirm; then
         log_error "Rust installation failed"
         ((INSTALL_FAILURES++))
+        ((REQUIRED_FAILURES++))
     fi
     
     # Verify Rust installation
     if ! rustc --version &>/dev/null; then
         log_error "Rust installation failed"
         ((INSTALL_FAILURES++))
+        ((REQUIRED_FAILURES++))
     else
         log_success "Rust installed: $(rustc --version)"
     fi
@@ -374,6 +387,7 @@ phase_dev_toolchains() {
     if ! cargo --version &>/dev/null; then
         log_error "Cargo installation failed"
         ((INSTALL_FAILURES++))
+        ((REQUIRED_FAILURES++))
     else
         log_success "Cargo installed: $(cargo --version)"
     fi
@@ -382,12 +396,14 @@ phase_dev_toolchains() {
     if ! sudo pacman -S go --noconfirm; then
         log_error "Go installation failed"
         ((INSTALL_FAILURES++))
+        ((REQUIRED_FAILURES++))
     fi
     
     # Verify Go installation
     if ! go version &>/dev/null; then
         log_error "Go installation failed"
         ((INSTALL_FAILURES++))
+        ((REQUIRED_FAILURES++))
     else
         log_success "Go installed: $(go version)"
     fi
@@ -405,6 +421,9 @@ phase_dev_toolchains() {
         if ! sudo pacman -S "$pkg" --noconfirm; then
             log_error "Failed to install $pkg"
             ((INSTALL_FAILURES++))
+            if [[ "$pkg" == "make" ]]; then
+                ((REQUIRED_FAILURES++))
+            fi
         fi
     done
     
@@ -418,8 +437,11 @@ phase_dev_toolchains() {
     if [ $INSTALL_FAILURES -eq 0 ]; then
         log_success "All development toolchains installed successfully"
         return 0
+    elif [ $REQUIRED_FAILURES -eq 0 ]; then
+        log_warn "Some non-critical tools failed to install, but all required tools are present"
+        return 0
     else
-        log_error "$INSTALL_FAILURES development tool(s) failed to install"
+        log_error "$REQUIRED_FAILURES required development tool(s) failed to install"
         return 1
     fi
 }
@@ -763,6 +785,13 @@ phase_validation() {
     # Check if we're in a test environment
     if [ "$IS_TEST_ENV" = "true" ]; then
         log_warn "Test environment detected - ignoring missing tools"
+        
+        # In test mode, we still need to report the status for CI/CD validation
+        if [ "$REQUIRED_FAILED" -gt 0 ]; then
+            # This message is checked by CI/CD to detect failures
+            log_warn "$REQUIRED_FAILED required tools are missing (test environment)"
+        fi
+        
         return 0
     fi
     

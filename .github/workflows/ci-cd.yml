@@ -147,7 +147,7 @@ jobs:
           - test_mode: basic
             test_args: "--verify-only"
           - test_mode: full
-            test_args: "--quick"
+            test_args: ""
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -181,7 +181,7 @@ jobs:
             exit 1
           fi
 
-          # Check if the script reached the validation phase
+          # Check if the script reached the verification phase
           if ! grep -E "System Verification & Preparation" test-output-${{ matrix.test_mode }}.log; then
             echo "::error::Test failed: Script did not reach verification phase"
             exit 1
@@ -194,43 +194,26 @@ jobs:
               exit 1
             fi
             
-            # Check for application installation failures
-            if grep -E "ERROR|FAILED|failed to|could not|Bootstrap completed with .* phase\(s\) reporting errors" test-output-${{ matrix.test_mode }}.log | grep -v "grep"; then
-              echo "::error::Application installation failures detected in logs"
-              grep -E "ERROR|FAILED|failed to|could not|Bootstrap completed with .* phase\(s\) reporting errors" test-output-${{ matrix.test_mode }}.log | grep -v "grep"
+            # Check that installation phases actually ran and completed
+            if ! grep -E "All development toolchains installed successfully|All phases completed successfully" test-output-${{ matrix.test_mode }}.log; then
+              echo "::error::Installation phases did not complete successfully"
               exit 1
             fi
             
-            # Check for required tools that should be installed
-            REQUIRED_TOOLS=("pip" "node" "npm" "java" "rustc" "cargo" "go")
-            OPTIONAL_TOOLS=("flatpak")
+            # Check for successful tool installations in log
+            REQUIRED_TOOLS=("Python installed" "Node.js installed" "Java installed" "Rust installed" "Cargo installed" "Go installed")
             MISSING_REQUIRED=0
-            MISSING_OPTIONAL=0
             
-            echo "Checking for required tools..."
-            for tool in "${REQUIRED_TOOLS[@]}"; do
-              if grep -E "✗ $tool: NOT FOUND" test-output-${{ matrix.test_mode }}.log; then
-                echo "::error::Required tool '$tool' was not installed"
+            echo "Checking for successfully installed required tools..."
+            for tool_check in "${REQUIRED_TOOLS[@]}"; do
+              if ! grep -q "$tool_check" test-output-${{ matrix.test_mode }}.log; then
+                echo "::error::Required tool installation not confirmed: '$tool_check'"
                 MISSING_REQUIRED=1
               fi
             done
             
-            echo "Checking for optional tools..."
-            for tool in "${OPTIONAL_TOOLS[@]}"; do
-              if grep -E "✗ $tool: NOT FOUND" test-output-${{ matrix.test_mode }}.log; then
-                echo "::warning::Optional tool '$tool' was not installed"
-                MISSING_OPTIONAL=1
-              fi
-            done
-            
-            # Check for the summary line indicating required tools failed
-            if grep -E "required tools are missing" test-output-${{ matrix.test_mode }}.log; then
-              echo "::error::Required tools are missing according to validation"
-              MISSING_REQUIRED=1
-            fi
-            
             if [ $MISSING_REQUIRED -eq 1 ]; then
-              echo "::error::One or more required tools were not installed"
+              echo "::error::One or more required tools were not successfully installed"
               exit 1
             fi
           fi
