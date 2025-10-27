@@ -78,7 +78,15 @@ jobs:
           
       - name: Check for insecure certificate validation
         run: |
-          INSECURE_CERT=$(grep -r "curl.*-k\|wget.*--no-check-certificate" --include="*.sh" . || true)
+          # Create a temporary file with exceptions
+          cat > /tmp/cert_exceptions.txt << EOF
+          # Security audit scripts search for these patterns (intentional)
+          scripts/security/security_audit.sh
+          # Test files are allowed to have security checks
+          test.sh
+          EOF
+          
+          INSECURE_CERT=$(grep -r "curl.*-k\|wget.*--no-check-certificate" --include="*.sh" . | grep -v -f /tmp/cert_exceptions.txt || true)
           
           if [ -n "$INSECURE_CERT" ]; then
             echo "::error::Insecure certificate validation found:"
