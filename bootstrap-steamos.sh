@@ -212,8 +212,12 @@ phase_verify_system() {
     log_success "sudo access confirmed"
     
     log_step "Detecting SteamOS filesystem mode..."
+    # Check real cmdline first
     if [ -e /proc/cmdline ] && grep -q "steamos_cmdline" /proc/cmdline 2>/dev/null; then
         log_success "SteamOS kernel detected"
+    # For testing environments, check mock file
+    elif [ -e /etc/steamos/mock_cmdline ] && grep -q "steamos_cmdline" /etc/steamos/mock_cmdline 2>/dev/null; then
+        log_success "SteamOS kernel detected (test environment)"
     fi
 }
 

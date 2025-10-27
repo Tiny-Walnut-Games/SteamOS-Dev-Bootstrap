@@ -23,8 +23,9 @@ RUN mkdir -p /etc && \
     echo 'PRETTY_NAME="SteamOS 3.0 (Holo)"' >> /etc/os-release
 
 # Add mock kernel cmdline for SteamOS detection
-RUN mkdir -p /proc && \
-    echo 'BOOT_IMAGE=/boot/vmlinuz-linux root=UUID=xxx ro quiet splash steamos_neptune=1' > /proc/cmdline
+# We can't write to /proc/cmdline directly, so create a mock file
+RUN mkdir -p /etc/steamos && \
+    echo 'BOOT_IMAGE=/boot/vmlinuz-linux root=UUID=xxx ro quiet splash steamos_cmdline=1' > /etc/steamos/mock_cmdline
 
 # Switch to test user
 USER testuser
