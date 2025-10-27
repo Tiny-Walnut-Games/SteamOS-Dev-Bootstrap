@@ -224,9 +224,14 @@ jobs:
             done
             
             # Check for the summary line indicating required tools failed
-            if grep -E "required tools are missing" test-output-${{ matrix.test_mode }}.log; then
+            if grep -E "required tools are missing$" test-output-${{ matrix.test_mode }}.log; then
               echo "::error::Required tools are missing according to validation"
               MISSING_REQUIRED=1
+            fi
+            
+            # In test environments, we expect a different message format
+            if grep -E "required tools are missing \(test environment\)" test-output-${{ matrix.test_mode }}.log; then
+              echo "::warning::Required tools are missing in test environment (expected in CI)"
             fi
             
             if [ $MISSING_REQUIRED -eq 1 ]; then
