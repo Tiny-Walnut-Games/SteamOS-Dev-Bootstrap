@@ -37,6 +37,35 @@ curl -fsSL https://raw.githubusercontent.com/Tiny-Walnut-Games/SteamOS-Dev-Boots
 - **Container Tools**: Sets up Docker and Podman for containerized development
 - **Shell Environment**: Configures your shell with useful aliases and settings
 
+## 📦 Managing Flatpak Applications
+
+The bootstrap script installs applications via Flatpak using a centralized catalog (`flatpak-apps.conf`). This makes it easy to customize which applications get installed:
+
+### Quick Customization
+
+Edit `flatpak-apps.conf` to add, remove, or organize applications:
+
+```ini
+[development-ides]
+com.jetbrains.Rider=JetBrains Rider IDE
+com.visualstudio.code=Visual Studio Code
+
+[graphics-design]
+org.gimp.GIMP=GIMP Image Editor
+
+[gaming-entertainment]
+com.lutris.Lutris=Lutris Gaming Platform
+```
+
+**Comments:** Lines starting with `#` are ignored, so you can comment out applications to skip them:
+
+```ini
+# Commented out - not installed
+# com.spotify.Client=Spotify
+```
+
+For complete documentation on managing the Flatpak catalog, including a comprehensive list of available applications and troubleshooting tips, see [FLATPAK_APPLICATIONS.md](docs/FLATPAK_APPLICATIONS.md).
+
 ## 🧪 Development & Testing
 
 This project uses a comprehensive CI/CD pipeline to ensure the bootstrap script works correctly.

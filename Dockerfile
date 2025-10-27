@@ -1,8 +1,8 @@
 FROM archlinux:base
 
-# Install minimal dependencies for testing
+# Install minimal dependencies for testing (including Flatpak and dbus)
 RUN pacman -Syu --noconfirm && \
-    pacman -S --noconfirm bash sudo git curl wget ca-certificates && \
+    pacman -S --noconfirm bash sudo git curl wget ca-certificates flatpak dbus && \
     pacman -Scc --noconfirm
 
 # Create test user with sudo access
@@ -10,8 +10,9 @@ RUN useradd -m testuser && \
     echo "testuser ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/testuser && \
     chmod 440 /etc/sudoers.d/testuser
 
-# Copy bootstrap script with proper permissions
+# Copy bootstrap script and catalog with proper permissions
 COPY --chown=testuser:testuser bootstrap-steamos.sh /home/testuser/bootstrap-steamos.sh
+COPY --chown=testuser:testuser flatpak-apps.conf /home/testuser/flatpak-apps.conf
 COPY --chown=testuser:testuser scripts/ /home/testuser/scripts/
 RUN chmod +x /home/testuser/bootstrap-steamos.sh
 
@@ -27,6 +28,9 @@ RUN mkdir -p /etc && \
 RUN mkdir -p /etc/steamos && \
     echo 'BOOT_IMAGE=/boot/vmlinuz-linux root=UUID=xxx ro quiet splash steamos_cmdline=1' > /etc/steamos/mock_cmdline
 
+# Initialize Flatpak in the container (add Flathub repo)
+RUN flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo || true
+
 # Switch to test user
 USER testuser
 WORKDIR /home/testuser
@@ -34,5 +38,5 @@ WORKDIR /home/testuser
 # Set secure environment defaults
 ENV CURL_OPTIONS="--proto =https --tlsv1.2"
 
-# Interactive shell by default
-CMD ["/bin/bash"]
+# Start dbus daemon and run interactive shell
+CMD ["bash", "-c", "sudo mkdir -p /run/dbus && sudo dbus-daemon --system --print-address &> /dev/null; bash"]

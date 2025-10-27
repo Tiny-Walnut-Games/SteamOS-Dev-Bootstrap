@@ -216,6 +216,17 @@ jobs:
               echo "::error::One or more required tools were not successfully installed"
               exit 1
             fi
+            
+            # Check Flatpak phase (may fail in test environment due to bus limitations)
+            if grep -q "Flatpak Setup & GUI Applications" test-output-${{ matrix.test_mode }}.log; then
+              echo "Flatpak phase executed"
+              # Check for Flatpak failures (warnings are acceptable in test environment)
+              if grep -E "Bootstrap completed with.*error|ERRORS=" test-output-${{ matrix.test_mode }}.log | grep -q "phase(s) reporting errors"; then
+                echo "::warning::Flatpak phase may have encountered limitations in test environment"
+              else
+                echo "✓ Flatpak phase completed successfully"
+              fi
+            fi
           fi
 
           # Check the exit code from the bootstrap script

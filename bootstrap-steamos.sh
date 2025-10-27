@@ -511,13 +511,6 @@ phase_git_setup() {
 phase_flatpak_setup() {
     log_section "Flatpak Setup & GUI Applications"
     
-    # Check if we're in a test environment
-    if [ -e /etc/steamos/mock_cmdline ]; then
-        log_warn "Test environment detected - skipping Flatpak setup"
-        log_info "Flatpak requires system bus access which is limited in containers"
-        return 0
-    fi
-    
     log_step "Installing Flatpak..."
     if check_command flatpak; then
         log_success "Flatpak already installed"
@@ -535,40 +528,67 @@ phase_flatpak_setup() {
     
     log_step "Installing development applications via Flatpak..."
     
-    local FLATPAK_APPS=(
-        "io.github.GodotEngine.Godot:Godot Game Engine"
-        "com.unity.UnityHub:Unity Hub"
-        "org.gimp.GIMP:GIMP Image Editor"
-        "com.jetbrains.Rider:JetBrains Rider IDE"
-        "com.jetbrains.IntelliJ-IDEA-Community:IntelliJ IDEA (Community)"
-        "com.visualstudio.code:Visual Studio Code"
-        "org.gnome.gedit:GNOME Text Editor"
-        "com.github.mjakeman.text-pieces:Text Pieces"
-        "com.lutris.Lutris:Lutris Gaming Platform"
+    # Find catalog file in multiple locations
+    local CATALOG_FILE=""
+    local SEARCH_PATHS=(
+        "flatpak-apps.conf"                    # Current directory
+        "$(pwd)/flatpak-apps.conf"             # Current working directory
+        "$(dirname "$0")/flatpak-apps.conf"    # Script directory
+        "/home/testuser/flatpak-apps.conf"     # Test environment
     )
     
-    # Track installation failures
-    local INSTALL_FAILURES=0
-    
-    for app_entry in "${FLATPAK_APPS[@]}"; do
-        app_id="${app_entry%%:*}"
-        app_name="${app_entry##*:}"
-        log_step "Checking $app_name ($app_id)..."
-        if flatpak list --app | grep -qE "^[[:space:]]*${app_id}[[:space:]]"; then
-            log_success "$app_name already installed"
-        else
-            log_info "Installing $app_name..."
-            if ! flatpak install -y flathub "$app_id" 2>/dev/null; then
-                log_error "Failed to install $app_name (may require manual auth or be unavailable)"
-                ((INSTALL_FAILURES++))
-            else
-                log_success "$app_name installed successfully"
-            fi
+    for path in "${SEARCH_PATHS[@]}"; do
+        if [ -f "$path" ]; then
+            CATALOG_FILE="$path"
+            break
         fi
     done
     
+    if [ -z "$CATALOG_FILE" ]; then
+        log_warn "Flatpak catalog not found in search paths"
+        log_info "Checked: ${SEARCH_PATHS[*]}"
+        log_info "Skipping Flatpak application installation"
+        return 0
+    fi
+    
+    log_step "Using Flatpak catalog: $CATALOG_FILE"
+    
+    # Parse catalog and collect enabled apps (lines without # and in enabled sections)
+    local FLATPAK_APPS=()
+    local INSTALL_FAILURES=0
+    local APPS_INSTALLED=0
+    
+    # Read only active app entries (skip comments and section headers)
+    while IFS='=' read -r app_id app_name; do
+        # Skip empty lines, comments, and section headers
+        [[ -z "$app_id" || "$app_id" =~ ^# || "$app_id" =~ ^\[ ]] && continue
+        
+        # Trim whitespace
+        app_id=$(echo "$app_id" | xargs)
+        app_name=$(echo "$app_name" | xargs)
+        
+        log_step "Checking $app_name ($app_id)..."
+        
+        if flatpak list --app 2>/dev/null | grep -qE "^[[:space:]]*${app_id}[[:space:]]"; then
+            log_success "$app_name already installed"
+            ((APPS_INSTALLED++))
+        else
+            log_info "Installing $app_name..."
+            if flatpak install -y flathub "$app_id" 2>&1 | grep -qE "(already installed|Installation complete)"; then
+                log_success "$app_name installed successfully"
+                ((APPS_INSTALLED++))
+            else
+                log_error "Failed to install $app_name (may require manual auth or be unavailable)"
+                ((INSTALL_FAILURES++))
+            fi
+        fi
+    done < "$CATALOG_FILE"
+    
+    if [ $APPS_INSTALLED -gt 0 ]; then
+        log_success "Flatpak applications setup complete ($APPS_INSTALLED installed)"
+    fi
+    
     if [ $INSTALL_FAILURES -eq 0 ]; then
-        log_success "All Flatpak applications configured successfully"
         return 0
     else
         log_error "$INSTALL_FAILURES Flatpak application(s) failed to install"
