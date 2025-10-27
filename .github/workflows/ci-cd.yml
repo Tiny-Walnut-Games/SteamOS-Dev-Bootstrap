@@ -59,6 +59,12 @@ jobs:
           cat > /tmp/pipe_exceptions.txt << EOF
           # Test files are allowed to have pipe patterns
           test/ubuntu-adaptation.sh
+          # Bootstrap files contain examples in comments (safe)
+          bootstrap-steamos.sh
+          scripts/secure_bootstrap.sh
+          # Security audit scripts search for these patterns (intentional)
+          scripts/security/security_audit.sh
+          test.sh
           EOF
           
           # Check for pipe patterns in shell scripts, excluding exceptions
