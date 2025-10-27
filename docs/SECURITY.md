@@ -10,7 +10,7 @@ We offer two installation methods:
 
 ```bash
 # Download the script
-curl -fsSL https://raw.githubusercontent.com/YOUR-USERNAME/SteamOS-Dev-Bootstrap/main/bootstrap-steamos.sh -o bootstrap-steamos.sh
+curl -fsSL https://raw.githubusercontent.com/Tiny-Walnut-Games/SteamOS-Dev-Bootstrap/main/bootstrap-steamos.sh -o bootstrap-steamos.sh
 
 # Review the script content
 less bootstrap-steamos.sh
@@ -22,7 +22,7 @@ bash bootstrap-steamos.sh
 ### Option 2: Direct execution (Convenient but less secure)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/YOUR-USERNAME/SteamOS-Dev-Bootstrap/main/bootstrap-steamos.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Tiny-Walnut-Games/SteamOS-Dev-Bootstrap/main/bootstrap-steamos.sh | bash
 ```
 
 **Note:** The direct execution method doesn't allow you to review the script before execution. Only use this method if you trust the source.

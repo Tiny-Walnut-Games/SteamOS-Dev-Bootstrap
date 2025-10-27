@@ -43,7 +43,7 @@ This guide helps you test the SteamOS bootstrap script in a VM before switching 
 # 1. Switch to desktop mode
 # 2. Open terminal (Konsole)
 # 3. Download bootstrap script:
-curl -fsSL https://raw.githubusercontent.com/[your-username]/[your-repo]/main/bootstrap-steamos.sh -o bootstrap-steamos.sh
+curl -fsSL https://raw.githubusercontent.com/Tiny-Walnut-Games/SteamOS-Dev-Bootstrap/main/bootstrap-steamos.sh -o bootstrap-steamos.sh
 chmod +x bootstrap-steamos.sh
 
 # 4. Run the bootstrap script:

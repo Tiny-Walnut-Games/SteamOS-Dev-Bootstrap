@@ -8,12 +8,12 @@
 #
 # Run this on first login:
 #   Option 1 (Recommended): Download and verify before running
-#     curl -fsSL https://raw.githubusercontent.com/YOUR-USERNAME/SteamOS-Dev-Bootstrap/main/bootstrap-steamos.sh -o bootstrap-steamos.sh
+#     curl -fsSL https://raw.githubusercontent.com/Tiny-Walnut-Games/SteamOS-Dev-Bootstrap/main/bootstrap-steamos.sh -o bootstrap-steamos.sh
 #     less bootstrap-steamos.sh  # Review the script
 #     bash bootstrap-steamos.sh
 #
 #   Option 2: Direct execution (only if you trust the source)
-#     curl -fsSL https://raw.githubusercontent.com/YOUR-USERNAME/SteamOS-Dev-Bootstrap/main/bootstrap-steamos.sh | bash
+#     curl -fsSL https://raw.githubusercontent.com/Tiny-Walnut-Games/SteamOS-Dev-Bootstrap/main/bootstrap-steamos.sh | bash
 # ============================================================================
 
 set -euo pipefail
